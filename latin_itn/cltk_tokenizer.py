@@ -1,11 +1,55 @@
 """
-1:1 Replica of CLTK v0 Latin Word Tokenizer with Origin Metadata Tracking.
+Replica of CLTK v0 Latin Word Tokenizer with Origin Metadata Tracking.
 Matches tokenization logic for Latin-BERT while retaining origin metadata 
 for lossless Inverse Text Normalization (ITN) detokenization.
 """
 
+import re
+import unicodedata
 from typing import List, Tuple, NamedTuple, Optional
 from latin_itn.config import PUNCT_MAP
+
+# =====================================================================
+# PREPROCESSING NORMALIZATION HELPERS (Diacritics & j/v -> i/u)
+# =====================================================================
+
+def strip_diacritics(text: str) -> str:
+    """Strips macrons, accents, and converts ligatures (æ/œ -> ae/oe)."""
+    text = text.replace("æ", "ae").replace("œ", "oe")
+    nfd = unicodedata.normalize("NFD", text)
+    filtered = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
+    return unicodedata.normalize("NFC", filtered)
+
+
+def normalize_iu(text: str) -> str:
+    """
+    Normalizes Latin text to standard classical i/u orthography:
+    - uva -> uua, virgo -> uirgo, jam -> iam.
+    - Compound -iacere forms: ejicio -> eicio, conjicio -> conicio, objicit -> obicit.
+    """
+    # Handle compound verbs from -iacere (-jic- / -jici- after prefix/vowel -> -ic- / -ici-)
+    text = re.sub(r'([a-z])ji', r'\1i', text)
+
+    # Target only compound -iic- verb forms (eiicio -> eicio)
+    text = re.sub(r'([aeiouAEIOU])ii([cC])', r'\1i\2', text)
+
+    # Convert all remaining j to i
+    text = text.replace('j', 'i')
+
+    # Convert all remaining v to u
+    text = text.replace('v', 'u')
+
+    return text
+
+
+def normalize_token_text(text: str) -> str:
+    """Applies diacritic stripping and j/v to i/u normalization."""
+    return normalize_iu(strip_diacritics(text.lower()))
+
+
+# =====================================================================
+# CLTK EXCEPTION LISTS & ENCLITICS
+# =====================================================================
 
 QUE_EXCEPTIONS = [
     'quisque', 'quidque', 'quicque', 'quodque', 'cuiusque', 'cuique', 'quemque', 'quamque', 'quoque',
@@ -78,7 +122,7 @@ N_EXCEPTIONS = [
     'forsan', 'forsitan', 'fulmen', 'gramen', 'hymen', 'iason', 'in', 'limen', 'liquamen', 'lumen', 'nomen',
     'non', 'numen', 'omen', 'orion', 'paean', 'pan', 'pelion', 'phaethon', 'python', 'quin', 'semen', 'sin',
     'specimen', 'tamen', 'themin', 'titan', 'alcuin', 'caen', 'christian', 'chronicon', 'châtillon', 'claudian',
-    'john', 'justin', 'latin', 'lucan', 'martin', 'novatian', 'quintilian', 'roman', 'tertullian'
+    'iohn', 'iustin', 'latin', 'lucan', 'martin', 'nouatian', 'quintilian', 'roman', 'tertullian'
 ]
 
 UE_EXCEPTIONS = [
@@ -90,21 +134,14 @@ UE_EXCEPTIONS = [
     'supplicue', 'tenue', 'uiue', 'ungue', 'uoue'
 ]
 
-VE_EXCEPTIONS = [
-    'agave', 'ave', 'bove', 'breve', 'calve', 'cave', 'cive', 'curve', 'fave', 'furtive', 'gradive',
-    'grave', 'ignave', 'iove', 'lascive', 'leve', 'move', 'nave', 'neve', 'nive', 'praegrave',
-    'promiscue', 'prospicve', 'proterve', 'remove', 'resolve', 'saeve', 'salve', 'sive', 'solve',
-    'summove', 'vive', 'vove'
-]
-
 ST_EXCEPTIONS = [
     'abest', 'adest', 'ast', 'deest', 'est', 'inest', 'interest', 'post', 'potest', 'prodest', 'subest', 'superest'
 ]
 
-ENCLITICS = ['que', 'n', 'ne', 'ue', 've', 'st']
+ENCLITICS = ['que', 'n', 'ne', 'ue', 'st']
 
 LATIN_EXCEPTIONS = set(
-    QUE_EXCEPTIONS + NE_EXCEPTIONS + N_EXCEPTIONS + UE_EXCEPTIONS + VE_EXCEPTIONS + ST_EXCEPTIONS + ENCLITICS
+    QUE_EXCEPTIONS + NE_EXCEPTIONS + N_EXCEPTIONS + UE_EXCEPTIONS + ST_EXCEPTIONS + ENCLITICS
 )
 
 # Word replacements mapped directly per token to preserve original word boundaries
@@ -113,29 +150,34 @@ LATIN_REPLACEMENTS_MAP = {
     'tecum': ('cum', 'te'),
     'secum': ('cum', 'se'),
     'nobiscum': ('cum', 'nobis'),
-    'vobiscum': ('cum', 'vobis'),
+    'uobiscum': ('cum', 'uobis'),
     'quocum': ('cum', 'quo'),
     'quacum': ('cum', 'qua'),
     'quicum': ('cum', 'qui'),
     'quibuscum': ('cum', 'quibus'),
     'sodes': ('si', 'audes'),
+    'sis': ('si', 'uis'),
     'satin': ('satis', 'ne'),
     'scin': ('scis', 'ne'),
-    'sultis': ('si', 'vultis'),
+    'uin': ('uis', 'ne'),
+    'sultis': ('si', 'uultis'),
     'similist': ('similis', 'est'),
     'qualist': ('qualis', 'est')
 }
 
 
 class TokenInfo(NamedTuple):
-    """Container for token string, enclitic flag, and original pre-tokenized word stem."""
+    """Container for token string, enclitic flag, and original pre-tokenized/unnormalized word stem."""
     token_str: str
     is_enclitic: bool
     orig_word: Optional[str] = None
 
 
 class CLTKLegacyLatinTokenizer:
-    """CLTK v0 word tokenizer with origin metadata tracking for ITN detokenization."""
+    """
+    CLTK v0 word tokenizer with origin metadata tracking for ITN detokenization,
+    incorporating Latin preprocessing normalization (diacritic stripping and j/v to i/u).
+    """
 
     def __init__(self):
         self.enclitics = ENCLITICS
@@ -144,46 +186,57 @@ class CLTKLegacyLatinTokenizer:
 
     def tokenize(self, text: str) -> List[TokenInfo]:
         """
-        Tokenizes string into tokens and tracks origin metadata.
+        Tokenizes string into normalized tokens while tracking origin metadata
+        for lossless ITN detokenization (retaining macrons, j/v orthography, etc.).
         Returns: [TokenInfo(token_str, is_enclitic, orig_word), ...]
         """
         raw_tokens = text.strip().split()
         final_tokens: List[TokenInfo] = []
 
         for token in raw_tokens:
-            token_lower = token.lower()
+            # Normalize and lowercase upfront for uniform lookups and model inputs
+            norm_token = normalize_token_text(token)
 
-            # 1. Check for compound word replacements (e.g. "mecum" -> "cum" + "me")
-            if token_lower in self.replacements_map:
-                head, tail = self.replacements_map[token_lower]
+            # Check for compound word replacements
+            if norm_token in self.replacements_map:
+                head, tail = self.replacements_map[norm_token]
                 final_tokens.append(TokenInfo(token_str=head, is_enclitic=False, orig_word=token))
                 final_tokens.append(TokenInfo(token_str=tail, is_enclitic=True, orig_word=token))
                 continue
 
-            # 2. Check for enclitics if not in exceptions
+            # Check for enclitics if not in exceptions
             is_enclitic = False
-            if token_lower not in self.exceptions:
+            if norm_token not in self.exceptions:
                 for enclitic in self.enclitics:
-                    if token_lower.endswith(enclitic):
+                    if norm_token.endswith(enclitic):
                         if enclitic == 'n':
-                            stem = token[:-1]
-                            final_tokens.append(TokenInfo(token_str=stem, is_enclitic=False, orig_word=token))
+                            orig_stem = token[:-1]
+                            norm_stem = normalize_token_text(orig_stem)
+                            final_tokens.append(TokenInfo(token_str=norm_stem, is_enclitic=False, orig_word=orig_stem))
                             final_tokens.append(TokenInfo(token_str='-ne', is_enclitic=True, orig_word=token))
                         elif enclitic == 'st':
-                            stem = token[:-1] if token_lower.endswith('ust') else token[:-2]
-                            final_tokens.append(TokenInfo(token_str=stem, is_enclitic=False, orig_word=token))
+                            is_ust = norm_token.endswith('ust')
+                            orig_stem = token[:-1] if is_ust else token[:-2]
+                            norm_stem = normalize_token_text(orig_stem)
+                            final_tokens.append(TokenInfo(token_str=norm_stem, is_enclitic=False, orig_word=orig_stem))
                             final_tokens.append(TokenInfo(token_str='est', is_enclitic=True, orig_word=token))
                         else:
-                            stem = token[:-len(enclitic)]
-                            enc_str = f"-{token[-len(enclitic):].lower()}"
-                            final_tokens.append(TokenInfo(token_str=stem, is_enclitic=False, orig_word=None))
-                            final_tokens.append(TokenInfo(token_str=enc_str, is_enclitic=True, orig_word=None))
+                            orig_stem = token[:-len(enclitic)]
+                            orig_enc = token[-len(enclitic):]
+                            norm_stem = normalize_token_text(orig_stem)
+                            norm_enc = f"-{normalize_token_text(orig_enc)}"
+                            
+                            orig_word_val = orig_stem if orig_stem.lower() != norm_stem else None
+                            final_tokens.append(TokenInfo(token_str=norm_stem, is_enclitic=False, orig_word=orig_word_val))
+                            final_tokens.append(TokenInfo(token_str=norm_enc, is_enclitic=True, orig_word=None))
                         
                         is_enclitic = True
                         break
 
+            # Fallback for standard words
             if not is_enclitic:
-                final_tokens.append(TokenInfo(token_str=token, is_enclitic=False, orig_word=None))
+                orig_word_val = token if token.lower() != norm_token else None
+                final_tokens.append(TokenInfo(token_str=norm_token, is_enclitic=False, orig_word=orig_word_val))
 
         return final_tokens
 
@@ -194,7 +247,8 @@ def rejoin_cltk_enclitics_and_format(
 ) -> str:
     """
     Rejoins enclitics and expanded compound forms back to host words
-    and applies predicted ITN casing and punctuation.
+    and applies predicted ITN casing and punctuation, restoring original
+    orthography (macrons, j/v) via origin metadata.
     """
     formatted_words = []
 
@@ -228,7 +282,8 @@ def rejoin_cltk_enclitics_and_format(
 
             formatted_words.append(merged)
         else:
-            word_formatted = clean_token.capitalize() if casing == "TITLE" else clean_token.lower()
+            base_target = orig_word if orig_word else clean_token
+            word_formatted = base_target.capitalize() if casing == "TITLE" else base_target.lower()
             formatted_words.append(word_formatted + punct)
 
     return " ".join(formatted_words)
