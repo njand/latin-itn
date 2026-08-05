@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "latin-itn"
+version = "0.1.0"
+description = "Inverse Text Normalization (Casing & Punctuation Restoration) for Classical Latin ASR."
+readme = "README.md"
+authors = [
+  { name = "Nathan Anderson", email = "nateandero@gmail.com" }
+]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Linguistic",
+]
+keywords = ["latin", "nlp", "asr", "itn", "casing-restoration", "punctuation-restoration", "transformers"]
+requires-python = ">=3.9"
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/njand/latin-itn"
+"Bug Tracker" = "https://github.com/njand/latin-itn/issues"
+"HuggingFace Model" = "https://huggingface.co/njand/latin-asr-postprocessor"
+"Training Repo" = "https://github.com/njand/latin-asr-postprocess"
