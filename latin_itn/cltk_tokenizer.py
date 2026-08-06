@@ -42,9 +42,11 @@ def normalize_iu(text: str) -> str:
     return text
 
 
-def normalize_token_text(text: str) -> str:
+def normalize_token_text(text: str, lower: bool = True) -> str:
     """Applies diacritic stripping and j/v to i/u normalization."""
-    return normalize_iu(strip_diacritics(text.lower()))
+    if lower:
+        text = text.lower()
+    return normalize_iu(strip_diacritics(text))
 
 
 # =====================================================================

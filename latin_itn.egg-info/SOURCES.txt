@@ -1,0 +1,15 @@
+LICENSE
+README.md
+pyproject.toml
+latin_itn/__init__.py
+latin_itn/cltk_tokenizer.py
+latin_itn/config.py
+latin_itn/models.py
+latin_itn/predictor.py
+latin_itn.egg-info/PKG-INFO
+latin_itn.egg-info/SOURCES.txt
+latin_itn.egg-info/dependency_links.txt
+latin_itn.egg-info/requires.txt
+latin_itn.egg-info/top_level.txt
+tests/test_cltk_tokenizer.py
+tests/test_predictor.py
