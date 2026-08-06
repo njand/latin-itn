@@ -38,7 +38,7 @@ def normalize_iu(text: str) -> str:
     text = re.sub(r'([a-zA-Z])ji', r'\1i', text)
 
     # Target only compound -iic- verb forms (eiicio -> eicio, Eiicio -> Eicio)
-    text = re.sub(r'([aeiouAEIOU])iic', r'\1i\2', text)
+    text = re.sub(r'([aeiouAEIOU])iic', r'\1ic', text)
 
     # Convert all remaining j/J to i/I
     text = text.replace('j', 'i').replace('J', 'I')

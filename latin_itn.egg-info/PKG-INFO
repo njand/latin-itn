@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: latin-itn
-Version: 0.1.4
+Version: 0.1.5
 Summary: Inverse Text Normalization (Casing & Punctuation Restoration) for Classical Latin ASR.
 Author-email: Nathan Anderson <nateandero@gmail.com>
 License: MIT
