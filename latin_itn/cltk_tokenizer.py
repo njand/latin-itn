@@ -6,8 +6,9 @@ for lossless Inverse Text Normalization (ITN) detokenization.
 
 import re
 import unicodedata
-from typing import List, Tuple, NamedTuple, Optional
+from typing import List, Tuple, NamedTuple, Optional, Any
 from latin_itn.config import PUNCT_MAP
+
 
 # =====================================================================
 # PREPROCESSING NORMALIZATION HELPERS (Diacritics & j/v -> i/u)
@@ -42,7 +43,7 @@ def normalize_iu(text: str) -> str:
     return text
 
 
-def normalize_token_text(text: str, lower: bool = True) -> str:
+def normalize_text(text: str, lower: bool = True) -> str:
     """Applies diacritic stripping and j/v to i/u normalization."""
     if lower:
         text = text.lower()
@@ -197,7 +198,7 @@ class CLTKLegacyLatinTokenizer:
 
         for token in raw_tokens:
             # Normalize and lowercase upfront for uniform lookups and model inputs
-            norm_token = normalize_token_text(token)
+            norm_token = normalize_text(token, lower=True)
 
             # Check for compound word replacements
             if norm_token in self.replacements_map:
@@ -213,21 +214,21 @@ class CLTKLegacyLatinTokenizer:
                     if norm_token.endswith(enclitic):
                         if enclitic == 'n':
                             orig_stem = token[:-1]
-                            norm_stem = normalize_token_text(orig_stem)
+                            norm_stem = normalize_text(orig_stem, lower=True)
                             final_tokens.append(TokenInfo(token_str=norm_stem, is_enclitic=False, orig_word=orig_stem))
                             final_tokens.append(TokenInfo(token_str='-ne', is_enclitic=True, orig_word=token))
                         elif enclitic == 'st':
                             is_ust = norm_token.endswith('ust')
                             orig_stem = token[:-1] if is_ust else token[:-2]
-                            norm_stem = normalize_token_text(orig_stem)
+                            norm_stem = normalize_text(orig_stem, lower=True)
                             final_tokens.append(TokenInfo(token_str=norm_stem, is_enclitic=False, orig_word=orig_stem))
                             final_tokens.append(TokenInfo(token_str='est', is_enclitic=True, orig_word=token))
                         else:
                             orig_stem = token[:-len(enclitic)]
                             orig_enc = token[-len(enclitic):]
-                            norm_stem = normalize_token_text(orig_stem)
-                            norm_enc = f"-{normalize_token_text(orig_enc)}"
-                            
+                            norm_stem = normalize_text(orig_stem, lower=True)
+                            norm_enc = f"-{normalize_text(orig_enc, lower=True)}"
+
                             orig_word_val = orig_stem if orig_stem.lower() != norm_stem else None
                             final_tokens.append(TokenInfo(token_str=norm_stem, is_enclitic=False, orig_word=orig_word_val))
                             final_tokens.append(TokenInfo(token_str=norm_enc, is_enclitic=True, orig_word=None))
@@ -243,29 +244,57 @@ class CLTKLegacyLatinTokenizer:
         return final_tokens
 
 
-def rejoin_cltk_enclitics_and_format(
-    tokens_with_metadata: List[Tuple[str, bool] | TokenInfo], 
-    predicted_tags: List[str]
+def parse_tag(tag: Optional[str]) -> Tuple[Optional[str], str]:
+    """
+    Parses a predicted tag string (e.g., 'TITLE_PERIOD') into casing directive 
+    and punctuation character.
+    
+    Returns (None, "") if no tag is provided.
+    """
+    if not tag:
+        return None, ""
+
+    parts = tag.split("_", 1)
+    casing = parts[0]
+    punct_type = parts[1] if len(parts) > 1 else "NONE"
+    punct = PUNCT_MAP.get(punct_type, "")
+
+    return casing, punct
+
+
+def _apply_casing(text: str, casing: Optional[str]) -> str:
+    """Applies casing directive to text. Leaves text unchanged if casing is None."""
+    if casing == "TITLE":
+        return text.capitalize()
+    if casing == "LOWER":
+        return text.lower()
+    return text
+
+
+def rejoin_enclitics_and_format(
+    tokens_with_metadata: List[Tuple[str, bool] | Any],
+    predicted_tags: Optional[List[str]] = None,
 ) -> str:
     """
     Rejoins enclitics and expanded compound forms back to host words
-    and applies predicted ITN casing and punctuation, restoring original
-    orthography (macrons, j/v) via origin metadata.
+    and optionally applies predicted ITN casing and punctuation.
+
+    If `predicted_tags` is omitted or None, original casing is preserved
+    and no punctuation is added.
     """
     formatted_words = []
 
-    for meta, tag in zip(tokens_with_metadata, predicted_tags, strict=True):
+    # If tags aren't provided, pair each token with None
+    tags = predicted_tags if predicted_tags is not None else [None] * len(tokens_with_metadata)
+    use_strict = predicted_tags is not None
+
+    for meta, tag in zip(tokens_with_metadata, tags, strict=use_strict):
+        # Extract metadata
         token_str = meta[0]
         is_enclitic = meta[1]
-        orig_word = getattr(meta, "orig_word", None)
-        if orig_word is None and len(meta) > 2:
-            orig_word = meta[2]
+        orig_word = getattr(meta, "orig_word", None) or (meta[2] if len(meta) > 2 else None)
 
-        parts = tag.split("_")
-        casing = parts[0]
-        punct_type = parts[1] if len(parts) > 1 else "NONE"
-        punct = PUNCT_MAP.get(punct_type, "")
-
+        casing, punct = parse_tag(tag)
         clean_token = token_str[1:] if token_str.startswith("-") else token_str
 
         if is_enclitic and formatted_words:
@@ -273,19 +302,27 @@ def rejoin_cltk_enclitics_and_format(
             prev_word_clean = prev_word.rstrip(".,?!;: ")
 
             if orig_word:
-                # Reconstruct expanded original form ("vin", "mecum", "satin") using host casing
-                is_head_capitalized = prev_word_clean[0].isupper() if prev_word_clean else (casing == "TITLE")
-                base_word = orig_word.capitalize() if is_head_capitalized else orig_word.lower()
+                # Determine host word capitalization state
+                is_head_capitalized = (
+                    prev_word_clean[0].isupper() if prev_word_clean else (casing == "TITLE")
+                )
+
+                if casing is not None:
+                    base_word = orig_word.capitalize() if is_head_capitalized else orig_word.lower()
+                else:
+                    # Preserve original orthography casing if no tags provided
+                    base_word = orig_word.capitalize() if is_head_capitalized else orig_word
+
                 merged = base_word + punct
             else:
                 # Standard attached enclitics ("-que", "-ve")
-                word_formatted = clean_token.capitalize() if casing == "TITLE" else clean_token.lower()
+                word_formatted = _apply_casing(clean_token, casing)
                 merged = prev_word_clean + word_formatted + punct
 
             formatted_words.append(merged)
         else:
             base_target = orig_word if orig_word else clean_token
-            word_formatted = base_target.capitalize() if casing == "TITLE" else base_target.lower()
+            word_formatted = _apply_casing(base_target, casing)
             formatted_words.append(word_formatted + punct)
 
     return " ".join(formatted_words)

@@ -6,7 +6,7 @@ Processes arbitrary-length raw Latin ASR streams cleanly with CLTK pre-tokenizat
 from typing import Any, List, Optional
 import torch
 
-from latin_itn.cltk_tokenizer import CLTKLegacyLatinTokenizer, rejoin_cltk_enclitics_and_format
+from latin_itn.cltk_tokenizer import CLTKLegacyLatinTokenizer, rejoin_enclitics_and_format
 from latin_itn.models import get_model_and_tokenizer
 
 
@@ -77,7 +77,7 @@ def run_strided_inference(
     # Quick path for inputs fitting into a single window
     if total_tokens <= window_tokens:
         chunk_tags = _predict_chunk_tags(token_strings, model, tokenizer, device)
-        return rejoin_cltk_enclitics_and_format(tokens_meta, chunk_tags)
+        return rejoin_enclitics_and_format(tokens_meta, chunk_tags)
 
     final_tags = ["LOWER_NONE"] * total_tokens
     margin = (window_tokens - stride_tokens) // 2
@@ -118,7 +118,7 @@ def run_strided_inference(
         if is_last_chunk:
             break
         
-    return rejoin_cltk_enclitics_and_format(tokens_meta, final_tags)
+    return rejoin_enclitics_and_format(tokens_meta, final_tags)
 
 
 def _predict_chunk_tags(

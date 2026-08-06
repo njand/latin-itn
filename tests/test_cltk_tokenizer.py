@@ -1,7 +1,7 @@
 import pytest
 from latin_itn.cltk_tokenizer import (
     CLTKLegacyLatinTokenizer,
-    rejoin_cltk_enclitics_and_format,
+    rejoin_enclitics_and_format,
 )
 
 
@@ -40,12 +40,12 @@ def test_cltk_tokenizer_st_enclitic(tokenizer):
     assert words == ["qualis", "est"]
 
 
-def test_rejoin_cltk_enclitics_and_format():
+def test_rejoin_enclitics_and_format():
     """Test rejoining hyphenated enclitics and formatting casing and punctuation."""
     tokens_meta = [("arma", False), ("virum", False), ("-que", True), ("cano", False)]
     tags = ["TITLE_NONE", "LOWER_NONE", "LOWER_COMMA", "LOWER_PERIOD"]
 
-    formatted = rejoin_cltk_enclitics_and_format(tokens_meta, tags)
+    formatted = rejoin_enclitics_and_format(tokens_meta, tags)
     assert formatted == "Arma virumque, cano."
 
 
@@ -55,7 +55,7 @@ def test_cltk_enclitic_at_index_zero():
     tags = ["LOWER_NONE", "LOWER_PERIOD"]
 
     # Should not crash on boundary; falls back to appending string cleanly
-    formatted = rejoin_cltk_enclitics_and_format(tokens_meta, tags)
+    formatted = rejoin_enclitics_and_format(tokens_meta, tags)
     assert formatted == "que virum."
 
 
@@ -64,7 +64,7 @@ def test_cltk_consecutive_enclitics():
     tokens_meta = [("arma", False), ("-que", True), ("-ne", True)]
     tags = ["TITLE_NONE", "LOWER_NONE", "LOWER_QUESTION"]
 
-    formatted = rejoin_cltk_enclitics_and_format(tokens_meta, tags)
+    formatted = rejoin_enclitics_and_format(tokens_meta, tags)
     assert formatted == "Armaquene?"
 
 
@@ -74,14 +74,14 @@ def test_cltk_mismatched_tags_and_tokens():
     tags = ["TITLE_NONE"]  # Mismatched length
 
     with pytest.raises(ValueError):
-        rejoin_cltk_enclitics_and_format(tokens_meta, tags)
+        rejoin_enclitics_and_format(tokens_meta, tags)
 
 
 def test_cltk_st_contraction_formatting(tokenizer):
     """Verify how '-st' (est) contractions rejoin during post-processing."""
     raw_tokens = tokenizer.tokenize("similist")
     tags = ["TITLE_NONE", "LOWER_PERIOD"]
-    formatted = rejoin_cltk_enclitics_and_format(raw_tokens, tags)
+    formatted = rejoin_enclitics_and_format(raw_tokens, tags)
     
     assert formatted == "Similist.", f"Unexpected formatting: {formatted}"
 
@@ -104,4 +104,4 @@ def test_cltk_tokenizer_special_enclitic_splits(tokenizer):
 def test_cltk_empty_inputs(tokenizer):
     """Verify empty strings and empty lists format cleanly."""
     assert tokenizer.tokenize("") == []
-    assert rejoin_cltk_enclitics_and_format([], []) == ""
+    assert rejoin_enclitics_and_format([], []) == ""

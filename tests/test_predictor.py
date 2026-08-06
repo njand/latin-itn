@@ -200,8 +200,8 @@ def test_strided_inference_tag_stitching_precision(mock_predict_tags):
 
     mock_predict_tags.side_effect = side_effect
 
-    # We patch rejoin_cltk_enclitics_and_format to return the tags directly for verification
-    with patch("latin_itn.predictor.rejoin_cltk_enclitics_and_format", side_effect=lambda meta, tags: tags):
+    # We patch rejoin_enclitics_and_format to return the tags directly for verification
+    with patch("latin_itn.predictor.rejoin_enclitics_and_format", side_effect=lambda meta, tags: tags):
         tags = run_strided_inference(
             text="w0 w1 w2 w3 w4 w5",
             model=mock_model,
