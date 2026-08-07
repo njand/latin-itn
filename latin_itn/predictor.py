@@ -18,7 +18,7 @@ class LatinITNPredictor:
         model: Any,
         tokenizer: Any,
         cltk_tok: Optional[CLTKLegacyLatinTokenizer] = None,
-        device: str = "cpu",
+        device: str = "cpu"
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
@@ -129,7 +129,7 @@ def _predict_chunk_tags(
         token_strings,
         is_split_into_words=True,
         return_tensors="pt",
-        truncation=True,
+        truncation=True
     ).to(device)
 
     with torch.no_grad():
